@@ -1,52 +1,117 @@
-// Définition des broches de commande des moteurs
-const int moteur1 = 6; // Contrôle du moteur Droit
-const int moteur2 = 5; // Contrôle du moteur Gauche
+#include <Servo.h>
 
-const int trig_pin = 9;
-const int echo_pin = 10;
-float timing = 0.0;
-float distance = 0.0;
+// Moteurs
+const int moteur1 = 5;
+const int moteur2 = 3;
 
-float getDistance()
-{
-  digitalWrite(trig_pin, LOW);
-  delay(2);
-  
-  digitalWrite(trig_pin, HIGH);
-  delay(10);
-  digitalWrite(trig_pin, LOW);
-  
-  timing = pulseIn(echo_pin, HIGH);
-  distance = (timing * 0.034) / 2;
+// Capteur ultrasons
+const int triggerPin = 7;
+const int echoPin = 8;
 
-  return distance;
-}
+// Servo-moteur
+Servo myServo;
+const int servoPin = 9;
+
+// Paramètres
+const int DISTANCE_MAX = 50;
+const int angles[] = {0, 45, 90, 135, 180};
+int distances[5];
+
+// Grille mémoire
+const int GRID_SIZE = 20;
+int map[GRID_SIZE][GRID_SIZE] = {0};
+int posX = GRID_SIZE / 2;
+int posY = GRID_SIZE / 2;
 
 void setup() {
-  // Configuration des broches en sortie
   pinMode(moteur1, OUTPUT);
   pinMode(moteur2, OUTPUT);
+  pinMode(triggerPin, OUTPUT);
+  pinMode(echoPin, INPUT);
 
-  pinMode(echo_pin, INPUT);
-  pinMode(trig_pin, OUTPUT);
-  
-  digitalWrite(trig_pin, LOW);
+  myServo.attach(servoPin);
+  myServo.write(90);
+  delay(500);
+
+  Serial.begin(9600);
 }
 
 void loop() {
-  
-  float distance = getDistance();
-
-  if(distance <= 25)
-  {
-    digitalWrite(moteur1, LOW);
-    digitalWrite(moteur2, LOW);
-  }
-  else
-  {
-    digitalWrite(moteur1, HIGH);
-    digitalWrite(moteur2, HIGH);
+  for (int i = 0; i < 5; i++) {
+    myServo.write(angles[i]);
+    delay(500);
+    distances[i] = measureDistance();
+    if (distances[i] > DISTANCE_MAX) distances[i] = 0;
+    updateMap(angles[i], distances[i]);
   }
 
-  delay(1000);
+  int maxDistanceIndex = 0;
+  for (int i = 1; i < 5; i++) {
+    if (distances[i] > distances[maxDistanceIndex]) {
+      maxDistanceIndex = i;
+    }
+  }
+
+  if (distances[maxDistanceIndex] > 20) {
+    int moveDuration = distances[maxDistanceIndex] * 10;
+    if (angles[maxDistanceIndex] == 90) {
+      avancer(moveDuration);
+    } else if (angles[maxDistanceIndex] < 90) {
+      tournerGauche(moveDuration);
+    } else {
+      tournerDroite(moveDuration);
+    }
+  } else {
+    tournerGauche(500); // Action par défaut
+  }
+
+  delay(500);
+}
+
+int measureDistance() {
+  digitalWrite(triggerPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(triggerPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(triggerPin, LOW);
+
+  long duration = pulseIn(echoPin, HIGH);
+  return duration * 0.034 / 2;
+}
+
+void updateMap(int angle, int distance) {
+  int deltaX = cos(radians(angle)) * distance / 10;
+  int deltaY = sin(radians(angle)) * distance / 10;
+  int x = posX + deltaX;
+  int y = posY + deltaY;
+
+  if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+    map[x][y] = 1;
+  }
+}
+
+void avancer(int duration) {
+  digitalWrite(moteur1, HIGH);
+  digitalWrite(moteur2, HIGH);
+  delay(duration);
+  stopMoteurs();
+}
+
+void tournerGauche(int duration) {
+  digitalWrite(moteur1, LOW);
+  digitalWrite(moteur2, HIGH);
+  delay(duration);
+  stopMoteurs();
+}
+
+void tournerDroite(int duration) {
+  digitalWrite(moteur1, HIGH);
+  digitalWrite(moteur2, LOW);
+  delay(duration);
+  stopMoteurs();
+}
+
+void stopMoteurs() {
+  digitalWrite(moteur1, LOW);
+  digitalWrite(moteur2, LOW);
 }
