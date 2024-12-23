@@ -1,211 +1,151 @@
-#include <TScheduler.hpp>
-#include <TSchedulerDeclarations.hpp>
-#include <TaskScheduler.h>
-#include <TaskSchedulerDeclarations.h>
-#include <TaskSchedulerSleepMethods.h>
 
+// Inclut la lib Servo pour manipuler le servomoteur
 #include <Servo.h>
 
-// Moteurs
-const int moteur1 = 5;
-const int moteur2 = 3;
+// Définition des broches de commande des moteurs
+// Moteur 1
+const int enA = 6;        // Proportion de vitesse GAUCHE
+const int moteurPin1 = 2; // Contrôle du moteur
+const int moteurPin2 = 4;
 
-// Capteur ultrasons
-const int trig_pin = 7;
-const int echo_pin = 8;
-float duration_us, distance_cm;
+// Moteur 2
+const int enB = 11;       // Proportion de vitesse DROITE
+const int moteurPin3 = 7; // Contrôle du moteur
+const int moteurPin4 = 8;
 
-// Servo-moteur
-Servo myServo;
-const int servoPin = 9;
 
-// Dictionnaire pour les angles et distances
-struct KeyValuePair {
-  int key;    // Angle
-  int value;  // Distance
-};
+// Variables pour gérer la tâche continue
+int position = 45;                // Position initiale
+int step = 1;                     // Direction et incrément de déplacement
+unsigned long previousMillis = 0; // Stockage du temps précédent
+const int interval = 15;          // Intervalle entre les mouvements (en ms)
 
-const int MAX_ITEMS = 5;
-KeyValuePair dictionary[MAX_ITEMS] = {
-  {0, 0},    // Angle 0° (gauche)
-  {45, 0},   // Angle 45° (avant-gauche)
-  {90, 0},   // Angle 90° (avant)
-  {135, 0},  // Angle 135° (avant-droit)
-  {180, 0}   // Angle 180° (droit)
-};
+// Servo
+Servo servo;
 
-// Distance critique pour détecter un obstacle
-const int DISTANCE_CRITIQUE = 30; // En cm
-const int DISTANCE_MAX = 1000;     // Plafond des distances
+// Detecteur ultrason
+const int trig_pin = 9;
+const int echo_pin = 10;
+float timing = 0.0;
+float distance = 0.0;
 
-// Création du Scheduler
-TsScheduler runner;
-
-// Fonction de détection des obstacles
-void detectObstacles() 
+// Calcule de la distance
+float getDistance()
 {
-  // Balayage des distances
-  for (int i = 0; i < MAX_ITEMS; i++) {
-    myServo.write(dictionary[i].key); // Déplacer le servo à l'angle
-    delay(250); // Temps pour que le servo atteigne la position
-    int dist = getDistance(); // Mesurer la distance
-    dictionary[i].value = (dist > DISTANCE_MAX) ? DISTANCE_MAX : dist; // Limiter à DISTANCE_MAX
-    Serial.print("Angle: ");
-    Serial.print(dictionary[i].key);
-    Serial.print(" Distance: ");
-    Serial.println(dictionary[i].value);
-  }
+  digitalWrite(trig_pin, LOW);
+  delayMicroseconds(2);
+  
+  digitalWrite(trig_pin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trig_pin, LOW);
+  
+  timing = pulseIn(echo_pin, HIGH, 30000);
+  if (timing == 0) return -1; // Retourner une valeur spéciale en cas d'erreur
+
+  return (timing * 0.034) / 2;
 }
 
-// Déclaration de la tâche de détection
-TsTask taskDetect(1000, TASK_FOREVER, detectObstacles);  // Détection toutes les 1000ms
+// Commandes moteur
+void goForward() 
+{
+  analogWrite(enA, 255); // Moteur GAUCHE puissance max
+  analogWrite(enB, 190);    // Moteur DROITE puissance réduite
+  digitalWrite(moteurPin1, LOW);
+  digitalWrite(moteurPin2, HIGH);
+  
+  digitalWrite(moteurPin3, HIGH);
+  digitalWrite(moteurPin4, LOW);
+}
 
-// Variables globales pour la distance actuelle et direction
-int forwardDistance = 0;  // Distance à l'avant
-int maxDistanceIndex = 0; // Index de la direction avec la plus grande distance
+void goBackward()
+{
+  digitalWrite(moteurPin1, HIGH);
+  digitalWrite(moteurPin2, LOW);
+  
+  digitalWrite(moteurPin3, LOW);
+  digitalWrite(moteurPin4, HIGH);
+}
 
+void turnLeft()
+{
+  digitalWrite(moteurPin1, LOW);
+  digitalWrite(moteurPin2, HIGH);
+  
+  digitalWrite(moteurPin3, LOW);
+  digitalWrite(moteurPin4, HIGH);
+}
+
+void turnRight()
+{
+  digitalWrite(moteurPin1, HIGH);
+  digitalWrite(moteurPin2, LOW);
+  
+  digitalWrite(moteurPin3, HIGH);
+  digitalWrite(moteurPin4, LOW);
+}
+
+void stopMotors() {
+  analogWrite(enA, 0);
+  analogWrite(enB, 0);
+}
 
 void setup() {
-  pinMode(moteur1, OUTPUT);
-  pinMode(moteur2, OUTPUT);
-  
-  pinMode(trig_pin, OUTPUT);
+  // Configuration des broches en sortie
+  pinMode(enA, OUTPUT);
+  pinMode(enB, OUTPUT);
+  pinMode(moteurPin1, OUTPUT);
+  pinMode(moteurPin2, OUTPUT);
+  pinMode(moteurPin3, OUTPUT);
+  pinMode(moteurPin4, OUTPUT);
+
   pinMode(echo_pin, INPUT);
+  pinMode(trig_pin, OUTPUT);
+  
+  digitalWrite(trig_pin, LOW);
 
-  myServo.attach(servoPin);
-  myServo.write(90);
-  delay(500);
+  goForward();
 
-  Serial.begin(9600);
+  servo.attach(3);
+
+  Serial.begin (9300);
 }
 
 void loop() {
   
-  // Exécution des tâches planifiées
-  runner.execute();
+  // unsigned long currentMillis = millis();
 
-  // Logique de déplacement continu
-  forwardDistance = dictionary[2].value; // Angle 90° (avant)
+  //   // Vérifier si le temps spécifié est écoulé
+  // if (currentMillis - previousMillis >= interval) {
+  //   previousMillis = currentMillis; // Mettre à jour le temps précédent
+
+  //   // Mettre à jour la position du servo
+  //   position += step;
+
+  //   // Vérifier les limites
+  //   if (position >= 120) {
+  //     position = 120;
+  //     step = -1;
+  //   } else if (position <= 50) {
+  //     position = 50;
+  //     step = 1;
+  //   }
+
+  //   // Écrire la nouvelle position au servo
+  //   servo.write(position);
+  // }
   
-  if (forwardDistance > DISTANCE_CRITIQUE) 
-  {
-    // Si l'avant est dégagé, avancer
-    Serial.println("Avancer...");
-    goForward(forwardDistance * 10); // Ajuster la durée en fonction de la distance
-  } 
-  else 
-  {
-    // Si un obstacle est détecté à l'avant, chercher la meilleure direction
-    Serial.println("Obstacle détecté. Recherche d'un chemin libre...");
-    maxDistanceIndex = findMaxDistanceIndex();
+  // // Logique de gestion des obstacles
+  // if (distance > 0 && distance <= 25) { // Obstacle proche détecté
+  //   stopMotors(); // Arrêter le robot
+  //   delay(500); // Pause pour éviter les mouvements brusques
+
+  //   if (position < 85) { // Servo vers la gauche
+  //     turnRight(); // Tourner à droite
+  //   } else { // Servo vers la droite
+  //     turnLeft(); // Tourner à gauche
+  //   }
     
-    // Utilisation de switch pour choisir la direction à prendre
-    switch (dictionary[maxDistanceIndex].key) {
-      case 0:
-        // Si la meilleure distance est à gauche (0°), tourner à gauche
-        Serial.println("Tourner à gauche...");
-        turnLeft(250);
-        break;
-
-      case 45:
-        // Si la meilleure distance est en avant-gauche (45°), tourner légèrement à gauche
-        Serial.println("Tourner avant-gauche...");
-        turnLeft(150);
-        break;
-
-      case 90:
-        // Si la meilleure distance est devant (90°), avancer
-        Serial.println("Avancer...");
-        goForward(dictionary[maxDistanceIndex].value * 10);
-        break;
-
-      case 135:
-        // Si la meilleure distance est en avant-droit (135°), tourner légèrement à droite
-        Serial.println("Tourner avant-droit...");
-        turnRight(150);
-        break;
-
-      case 180:
-        // Si la meilleure distance est à droite (180°), tourner à droite
-        Serial.println("Tourner à droite...");
-        turnRight(250);
-        break;
-
-      default:
-        // Dans le cas où l'index n'est pas reconnu
-        Serial.println("Aucune direction définie.");
-        break;
-    }
-  }
-}
-
-// Trouver l'index de la distance maximale
-int findMaxDistanceIndex() {
-  int maxIndex = 0;
-  for (int i = 1; i < MAX_ITEMS; i++) {
-    if (dictionary[i].value > dictionary[maxIndex].value) {
-      maxIndex = i;
-    }
-  }
-  return maxIndex;
-}
-
-// Mesurer la distance
-int getDistance()
-{
-  digitalWrite(trig_pin, HIGH);
-  delayMicroseconds(2);
-  digitalWrite(trig_pin, LOW);
-
-  // measure duration of pulse from ECHO pin
-  duration_us = pulseIn(echo_pin, HIGH);
-
-  // calculate the distance
-  distance_cm = 0.017 * duration_us;
-
-  return distance_cm;
-}
-
-// Fonctions pour contrôler les moteurs
-void goForward(int duration) 
-{
-  analogWrite(moteur1, 255);
-  analogWrite(moteur2, 255);
-  delay(duration);
-  //stopMotors();
-}
-
-void turnLeft(int duration) 
-{
-  analogWrite(moteur1, 0);
-  analogWrite(moteur2, 255);
-  delay(duration);
-  stopMotors();
-}
-
-void turnRight(int duration) 
-{
-  analogWrite(moteur1, 255);
-  analogWrite(moteur2, 0);
-  delay(duration);
-  stopMotors();
-}
-
-void stopMotors() 
-{
-  analogWrite(moteur1, 0);
-  analogWrite(moteur2, 0);
-}
-
-int getValue(int key) 
-{
-  
-  for (int i = 0; i < MAX_ITEMS; i++) {
-    if (dictionary[i].key == key) {
-      return dictionary[i].value; // Retourne la valeur associée
-    }
-  }
-
-  // Retourne -1 si la clé n'est pas trouvée
-  return -1; 
+  //   delay(500); // Pause pour permettre au robot de tourner
+  //   goForward(); // Reprendre en avant
+  // }
 }
